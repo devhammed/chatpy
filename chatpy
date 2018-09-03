@@ -1,0 +1,91 @@
+#!/usr/bin/env python
+
+import socket
+import thread
+import time
+from datetime import datetime
+
+HOST = 'localhost'
+PORT = 9999
+USERS = {}
+BUFSIZE = 1024
+DB_FILE = 'chatpy.pdb'
+
+def thread_socks( conn, addr ):
+  while True:
+    conn.send( 'Welcome, enter your username: ' )
+    try:
+      name = conn.recv( BUFSIZE ).strip()
+    except socket.error:
+      continue
+    if name in USERS:
+      conn.send( 'Sorry, this username has been taken!\n' )
+    elif name:
+      conn.setblocking( False )
+      USERS[ name ] = conn
+      try:
+        conn.send( open( DB_FILE, 'r+' ).read() )
+      except:
+        pass
+      print( '<< [%s] %s has connected to chat!' % ( addr, name ) )
+      broadcast_msg( name, '>> [%s] `%s` has joined the chat room.\n' % ( datetime.now(), name ) )
+      conn.send( '>>> Welcome %s, type and send :help anytime to show the Help menu\n' % name )
+      break
+
+def accept_socks( conn, addr ):
+  thread.start_new_thread( thread_socks, ( conn, addr ) )
+
+def broadcast_msg( name, message ):
+  try:
+    open( DB_FILE, 'a+' ).write( message + '\n' )
+  except:
+    pass
+  for to_name, conn in USERS.items():
+    if name != to_name:
+      try:
+        conn.send( message + '\n' )
+      except socket.error:
+        pass
+
+server = socket.socket( socket.AF_INET, socket.SOCK_STREAM )
+server.setsockopt( socket.SOL_SOCKET, socket.SO_REUSEADDR, 1 )
+server.setblocking( False )
+server.bind( ( HOST, PORT ) )
+server.listen( 1 )
+
+print( '<< Chat server has been started on %s:%s...' % ( HOST, PORT ) )
+
+# Main event loop
+while True:
+  try:
+    while True:
+      try:
+        conn, addr = server.accept()
+      except socket.error:
+        break
+      accept_socks( conn, addr )
+    for name, conn in USERS.items():
+      try:
+        message = conn.recv( BUFSIZE )
+      except socket.error:
+        continue
+      if message.startswith( ':quit' ):
+        conn.send( 'Bye, see you soon!\n' )
+        del USERS[ name ]
+        conn.close()
+        print( '<< %s has disconnected from chat!' % name )
+        broadcast_msg( name, '>> [%s] `%s` has left the chat\n' % ( datetime.now(), name ) )
+      elif message.startswith( ':users' ):
+        conn.send( '>> List of users in this chat session:\n' )
+        for user in USERS:
+          conn.send( '== %s\n' % user )
+      elif message.startswith( ':help' ):
+        conn.send( '>> Welcome to the Help, my name is Chatpy-Bot!\n' )
+        conn.send( '>> Type and send :users to list Users in the chat room\n' )
+        conn.send( '>> Type and send :help to display this Help menu\n')
+        conn.send( '>> Type and send :quit to leave the chat\n' )
+      else:
+        broadcast_msg( name, '[%s] %s: %s' % ( datetime.now(), name, message.strip() ) )
+      time.sleep( 1 )
+  except ( SystemExit, KeyboardInterrupt ):
+    break
