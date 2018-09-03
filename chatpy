@@ -3,12 +3,17 @@
 import socket
 import thread
 import time
+import sys
 from datetime import datetime
 
-HOST = 'localhost'
-PORT = 9999
+try: HOST = sys.argv[1]
+except IndexError: HOST = 'localhost'
+
+try: PORT = int( sys.argv[2] )
+except IndexError: PORT = 9999
+
 USERS = {}
-BUFSIZE = 1024
+BUFSIZE = 2048
 DB_FILE = 'chatpy.pdb'
 
 def thread_socks( conn, addr ):
